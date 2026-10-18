@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "365173564249",
+    "firebase_url": "https://esp32-ee54b-default-rtdb.firebaseio.com",
+    "project_id": "esp32-ee54b",
+    "storage_bucket": "esp32-ee54b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:365173564249:android:68df376217b6233186e248",
+        "android_client_info": {
+          "package_name": "online.digicopy.drivelink"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGD2ROd_4BPxEb0enGPg6qMrH-n62m1WE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

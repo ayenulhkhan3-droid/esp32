@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "cars": {
+      "car001": {
+        ".read": "auth != null && auth.token.email == 'ayenulhkhan3@gmail.com'",
+        ".write": "auth != null && auth.token.email == 'ayenulhkhan3@gmail.com'"
+      }
+    },
+    "meta": {
+      ".read": "auth != null && auth.token.email == 'ayenulhkhan3@gmail.com'",
+      ".write": false
+    }
+  }
+}

@@ -1,0 +1,42 @@
+DriveLink — Firebase Console setup (NO PHP, NO Google Sign-In)
+
+A) Authentication
+1. Open https://console.firebase.google.com → project esp32-ee54b (or yours)
+2. Build → Authentication → Get started
+3. Sign-in method → Email/Password → Enable → Save
+4. Users → Add user (if needed):
+   email: ayenulhkhan3@gmail.com
+   password: (your Firebase password)
+5. Google Sign-In is NOT used by the app — leave it disabled.
+
+B) Realtime Database
+1. Build → Realtime Database → Create Database (if missing)
+2. Location: nearest → Enable (locked mode is fine)
+3. Rules tab → paste → Publish:
+
+{
+  "rules": {
+    "cars": {
+      "car001": {
+        ".read": "auth != null && auth.token.email == 'ayenulhkhan3@gmail.com'",
+        ".write": "auth != null && auth.token.email == 'ayenulhkhan3@gmail.com'"
+      }
+    }
+  }
+}
+
+   If ESP32 cannot authenticate as that user, give the device a separate read rule
+   (e.g. open .read on cars/car001 only) — never open write to the world.
+
+4. Data path used by the app (auto-created on first drive):
+   cars/car001/{ command, mode, command_id, command_expires_at, expires_at_ms, source, updated_by, updated_at }
+
+C) Android app config
+1. Package name: online.digicopy.drivelink
+2. Values already in rc-car-app/src/config/firebase.ts (apiKey, appId, databaseURL, …)
+3. google-services.json may sit in rc-car-app/ for native builds
+
+D) Firmware
+Old PHP (api.digicopy.online/esp32.php) is unused.
+ESP32 must read Firebase Realtime Database (SDK or REST) at cars/car001
+and treat expired expires_at_ms as stop.

@@ -1,0 +1,40 @@
+﻿# Dependencies
+**/node_modules/
+.npm/
+
+# Expo
+**/.expo/
+**/dist/
+**/web-build/
+
+# Native build caches / outputs
+**/android/.gradle/
+**/android/build/
+**/android/app/build/
+**/android/.cxx/
+**/android/local.properties
+**/ios/build/
+**/ios/Pods/
+
+# Secrets & local
+.env
+.env.*
+!.env.example
+ftp-credentials*
+*.jks
+*.keystore
+!debug.keystore
+*.log
+.DS_Store
+Thumbs.db
+
+# Website build output (source + public/downloads APK are kept)
+website/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Misc
+**/.claude/
