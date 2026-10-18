@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
 import './App.css'
 
-const APK_PATH = '/downloads/DriveLink.apk'
 const APP_VERSION = '1.4.1'
 const GITHUB_URL = 'https://github.com/ayenulhkhan3-droid/esp32'
+/** Hosted on GitHub Releases (InfinityFree free tier is too small for ~74 MB APK). */
+const APK_PATH =
+  'https://github.com/ayenulhkhan3-droid/esp32/releases/download/v1.4.1/DriveLink.apk'
 
 const features = [
   {
@@ -50,7 +52,7 @@ export default function App() {
             Drive your ESP32 RC car from your phone — joystick or offline voice, linked through Firebase.
           </p>
           <div className="cta-row">
-            <a className="btn btn-primary" href={APK_PATH} download>
+            <a className="btn btn-primary" href={APK_PATH}>
               Download APK
               <span className="btn-meta">v{APP_VERSION}</span>
             </a>
@@ -91,7 +93,7 @@ export default function App() {
             <li>Open DriveLink → sign in with your Firebase email.</li>
             <li>Allow microphone once if you use Voice mode (offline Vosk).</li>
           </ol>
-          <a className="btn btn-primary" href={APK_PATH} download>
+          <a className="btn btn-primary" href={APK_PATH}>
             Get DriveLink.apk
           </a>
         </section>
