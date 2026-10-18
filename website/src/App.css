@@ -228,6 +228,18 @@ a {
   font-weight: 500;
 }
 
+.alt-dl {
+  margin: 0.35rem 0 0;
+  color: rgba(238, 245, 255, 0.72);
+  font-size: 0.9rem;
+}
+
+.alt-dl a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .features,
 .install,
 .foot {

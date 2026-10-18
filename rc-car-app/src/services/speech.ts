@@ -81,11 +81,11 @@ export function isSpeechAvailable(): boolean {
   return true;
 }
 
+/** Continuous listen — no timeout. Stays on until stopListening(). */
 export async function startListening(): Promise<void> {
   await ensureModelLoaded();
   await start({
     grammar: VOICE_GRAMMAR,
-    timeout: 8000,
   });
 }
 
@@ -133,7 +133,10 @@ export function describeSpeechError(error: unknown): string {
     return 'Microphone permission was denied.';
   }
   if (/timeout/i.test(message)) {
-    return 'No speech detected. Tap the mic and speak a command clearly.';
+    return 'Listening paused. Tap the mic to turn voice on again.';
+  }
+  if (/already in use/i.test(message)) {
+    return 'Mic is busy — tap Stop, then Start again.';
   }
   if (/model|load/i.test(message)) {
     return 'Offline speech model failed to load. Reinstall the app.';

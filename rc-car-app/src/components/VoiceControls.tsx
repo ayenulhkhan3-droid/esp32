@@ -25,21 +25,68 @@ interface VoiceControlsProps {
 }
 
 const SUPPORTED = ['forward', 'backward', 'left', 'right', 'stop', 'spin', 'explore'] as const;
+const MIN_GAP_MS = 700;
+
+function usefulSpeech(text: string): string | null {
+  const cleaned = text
+    .trim()
+    .toLowerCase()
+    .replace(/\[unk\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || cleaned.length < 2) return null;
+  return cleaned;
+}
 
 export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit }: VoiceControlsProps) {
   const [state, setState] = useState<VoiceState>('idle');
   const [modelReady, setModelReady] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [message, setMessage] = useState<string | null>(
-    'Offline Vosk speech — say stop, aage, peeche, left, right, spin, explore',
+    'Tap mic once — voice stays ON until you tap Stop. Say aage, ruko, left…',
   );
   const [result, setResult] = useState<{ command: VoiceResultCommand; reply: string } | null>(null);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
 
   const sessionActive = useRef(false);
-  const submitted = useRef(false);
+  const busy = useRef(false);
+  const lastSentAt = useRef(0);
+  const lastText = useRef('');
   const mounted = useRef(true);
   const pulse = useRef(new Animated.Value(0)).current;
+
+  const restartListening = useCallback(async () => {
+    if (!sessionActive.current || !mounted.current) return;
+    try {
+      stopListening();
+    } catch {
+      // ignore
+    }
+    // Brief gap so Android mic releases cleanly
+    await new Promise((r) => setTimeout(r, 180));
+    if (!sessionActive.current || !mounted.current) return;
+    try {
+      await startListening();
+      if (mounted.current && sessionActive.current) {
+        setState('listening');
+        setMessage('Voice ON — keep speaking commands. Tap red Stop to turn off.');
+      }
+    } catch (error) {
+      if (!mounted.current || !sessionActive.current) return;
+      // Retry once
+      await new Promise((r) => setTimeout(r, 400));
+      if (!sessionActive.current || !mounted.current) return;
+      try {
+        await startListening();
+        setState('listening');
+        setMessage('Voice ON — keep speaking commands. Tap red Stop to turn off.');
+      } catch (err) {
+        sessionActive.current = false;
+        setState('error');
+        setMessage(describeSpeechError(err));
+      }
+    }
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -50,7 +97,7 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
         if (!mounted.current) return;
         setModelReady(true);
         setState('idle');
-        setMessage('Tap mic — offline Vosk (no Google). Say e.g. "aage", "ruko", "spin"');
+        setMessage('Tap mic once — stays ON until you Stop. One word = one command.');
       })
       .catch((error) => {
         if (!mounted.current) return;
@@ -60,7 +107,8 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
       });
     return () => {
       mounted.current = false;
-      if (sessionActive.current) abortListening();
+      sessionActive.current = false;
+      abortListening();
     };
   }, []);
 
@@ -70,7 +118,7 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
       sessionActive.current = false;
       abortListening();
       setState('idle');
-      setMessage('Listening cancelled by Stop.');
+      setMessage('Voice turned off by Emergency Stop.');
     }
   }, [cancelToken]);
 
@@ -87,35 +135,42 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
     return () => loop.stop();
   }, [state, pulse]);
 
-  const submit = useCallback(
+  const handleUtterance = useCallback(
     async (text: string) => {
-      const cleaned = text.trim();
-      if (!cleaned) {
-        setState('error');
-        setMessage('No speech detected. Try again.');
-        return;
-      }
+      const cleaned = usefulSpeech(text);
+      if (!cleaned || !sessionActive.current || busy.current) return;
+
+      const now = Date.now();
+      if (cleaned === lastText.current && now - lastSentAt.current < MIN_GAP_MS) return;
+      if (now - lastSentAt.current < 350) return;
+
+      busy.current = true;
+      lastText.current = cleaned;
+      lastSentAt.current = now;
+      setTranscript(cleaned);
       setState('processing');
-      setMessage('Sending command to Firebase\u2026');
+      setMessage('Sending command\u2026');
+
       try {
+        // Pause recognizer while writing so we don't double-fire
+        stopListening();
         const outcome = await onSubmit(cleaned);
         if (!mounted.current) return;
         if (outcome.superseded) {
+          sessionActive.current = false;
           setResult(null);
           setState('idle');
-          setMessage('Emergency Stop was pressed — this voice command was overridden.');
+          setMessage('Emergency Stop — voice turned off.');
           return;
         }
         setResult({ command: outcome.response.command, reply: outcome.response.reply });
         if (outcome.response.command === 'none') {
           setState('nomatch');
-          setMessage('No movement sent. Try: stop, aage, peeche, left, right, spin, explore.');
+          setMessage('Not understood — still listening. Try: aage, ruko, left, spin…');
         } else {
           setState('success');
           setMessage(
-            outcome.response.command === 'stop'
-              ? 'Stop written to Firebase.'
-              : 'Command written to Firebase. Renewed while active / expires after a few seconds.',
+            `${COMMAND_LABELS[outcome.response.command]} sent. Voice still ON — say next command or tap Stop.`,
           );
         }
       } catch (error) {
@@ -123,59 +178,64 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
         setResult(null);
         setState('error');
         setMessage(describeError(error));
+      } finally {
+        busy.current = false;
+        if (sessionActive.current && mounted.current) {
+          void restartListening();
+        }
       }
     },
-    [onSubmit],
+    [onSubmit, restartListening],
   );
 
   useEffect(() => {
     return subscribeSpeech({
       onPartial: (text) => {
-        if (!sessionActive.current || submitted.current) return;
-        setTranscript(text);
+        if (!sessionActive.current || busy.current) return;
+        const cleaned = usefulSpeech(text);
+        if (cleaned) setTranscript(cleaned);
       },
       onResult: (text) => {
-        if (!sessionActive.current || submitted.current) return;
-        const cleaned = text.trim();
-        setTranscript(cleaned);
-        if (!cleaned) return;
-        submitted.current = true;
-        sessionActive.current = false;
-        void submit(cleaned);
+        void handleUtterance(text);
       },
       onFinal: (text) => {
-        if (!sessionActive.current || submitted.current) return;
-        const cleaned = text.trim();
-        setTranscript(cleaned);
-        submitted.current = true;
-        sessionActive.current = false;
-        void submit(cleaned || '');
+        // Session may end after silence — restart if user still wants voice ON
+        void handleUtterance(text).finally(() => {
+          if (sessionActive.current && !busy.current) void restartListening();
+        });
       },
       onError: (error) => {
-        if (!sessionActive.current && submitted.current) return;
-        sessionActive.current = false;
-        setState('error');
-        setMessage(describeSpeechError(error));
+        if (!sessionActive.current) return;
+        // Transient — try to keep session alive
+        const msg = describeSpeechError(error);
+        if (/already in use/i.test(String(error))) {
+          void restartListening();
+          return;
+        }
+        setMessage(msg);
+        void restartListening();
       },
       onTimeout: () => {
-        if (!sessionActive.current || submitted.current) return;
-        sessionActive.current = false;
-        setState('error');
-        setMessage('No speech detected. Tap the mic and speak clearly.');
+        // Should not happen (no timeout) — restart if still ON
+        if (sessionActive.current) void restartListening();
       },
     });
-  }, [submit]);
+  }, [handleUtterance, restartListening]);
 
   const onMicPress = async () => {
-    if (state === 'processing' || state === 'loading') return;
+    if (state === 'loading') return;
+
+    // Toggle OFF
     if (sessionActive.current) {
-      stopListening();
       sessionActive.current = false;
+      busy.current = false;
+      stopListening();
       setState('idle');
-      setMessage('Listening stopped.');
+      setMessage('Voice OFF. Tap mic to turn on again.');
       return;
     }
-    if (disabled || !modelReady) return;
+
+    if (disabled || !modelReady || state === 'processing') return;
 
     setResult(null);
     setTranscript('');
@@ -193,10 +253,11 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
       return;
     }
 
-    submitted.current = false;
+    busy.current = false;
+    lastText.current = '';
     sessionActive.current = true;
     setState('listening');
-    setMessage('Listening (offline Vosk)\u2026 tap mic to cancel');
+    setMessage('Voice ON — say commands anytime. Tap red Stop when done.');
     try {
       await startListening();
     } catch (error) {
@@ -206,18 +267,18 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
     }
   };
 
-  const listening = state === 'listening';
-  const micColor = state === 'error' ? colors.danger : colors.primary;
+  const showStop = sessionActive.current;
+  const micColor = state === 'error' && !sessionActive.current ? colors.danger : colors.primary;
 
   return (
     <View style={styles.container}>
       <View style={styles.badge}>
         <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
-        <Text style={styles.badgeText}>Offline Vosk · no Google speech</Text>
+        <Text style={styles.badgeText}>Offline Vosk · stays on until you Stop</Text>
       </View>
 
       <View style={styles.micArea}>
-        {listening ? (
+        {showStop ? (
           <Animated.View
             pointerEvents="none"
             style={[
@@ -231,37 +292,40 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
         ) : null}
         <Pressable
           onPress={onMicPress}
-          disabled={state === 'processing' || state === 'loading' || (disabled && !listening) || !modelReady}
+          disabled={state === 'loading' || (disabled && !showStop) || !modelReady}
           style={({ pressed }) => [
             styles.mic,
-            { backgroundColor: listening ? colors.danger : micColor },
+            { backgroundColor: showStop ? colors.danger : micColor },
             pressed && styles.micPressed,
-            ((disabled && !listening) || state === 'processing' || state === 'loading' || !modelReady) &&
-              styles.micDisabled,
+            ((disabled && !showStop) || state === 'loading' || !modelReady) && styles.micDisabled,
           ]}
           accessibilityRole="button"
-          accessibilityLabel={listening ? 'Stop listening' : 'Start voice command'}
+          accessibilityLabel={showStop ? 'Turn voice off' : 'Turn voice on'}
         >
-          {state === 'processing' || state === 'loading' ? (
+          {state === 'loading' || (state === 'processing' && showStop) ? (
             <ActivityIndicator color={colors.white} size="large" />
           ) : (
-            <Ionicons name={listening ? 'stop' : 'mic'} size={40} color={colors.white} />
+            <Ionicons name={showStop ? 'stop' : 'mic'} size={40} color={colors.white} />
           )}
         </Pressable>
       </View>
 
       <Text style={styles.stateLabel}>
-        {disabled && !listening && state !== 'processing'
+        {disabled && !showStop
           ? disabledReason ?? 'Voice control unavailable'
-          : {
-              idle: 'Tap the mic and speak a command',
-              loading: 'Loading offline model\u2026',
-              listening: 'Listening offline\u2026',
-              processing: 'Processing\u2026',
-              success: 'Command sent',
-              nomatch: 'Command not understood',
-              error: 'Something went wrong',
-            }[state]}
+          : showStop
+            ? state === 'processing'
+              ? 'Sending… voice stays on'
+              : 'Voice ON — listening'
+            : {
+                idle: 'Tap mic once to turn voice ON',
+                loading: 'Loading offline model…',
+                listening: 'Voice ON',
+                processing: 'Processing…',
+                success: 'Command sent',
+                nomatch: 'Not understood',
+                error: 'Something went wrong',
+              }[state]}
       </Text>
 
       <View style={styles.transcriptCard}>
@@ -283,7 +347,7 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
           </View>
         ) : null}
         {message ? (
-          <Text style={[styles.message, state === 'error' && styles.messageError]}>{message}</Text>
+          <Text style={[styles.message, state === 'error' && !showStop && styles.messageError]}>{message}</Text>
         ) : null}
         {permissionBlocked ? (
           <Pressable onPress={() => void Linking.openSettings()} style={styles.settingsButton} accessibilityRole="button">
@@ -294,8 +358,7 @@ export function VoiceControls({ disabled, disabledReason, cancelToken, onSubmit 
       </View>
 
       <Text style={styles.supported}>
-        Commands: {SUPPORTED.join(', ')}. Hinglish OK: aage, peeche, ruko. Explore = ultrasonic obstacle avoidance on
-        the car (not AI).
+        One tap ON · one word = one command ({SUPPORTED.join(', ')}). Hinglish: aage, peeche, ruko, ghumo.
       </Text>
     </View>
   );

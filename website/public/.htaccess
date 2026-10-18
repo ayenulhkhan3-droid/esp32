@@ -1,14 +1,32 @@
-# InfinityFree / Apache — SPA fallback + allow APK download
 Options -Indexes
+
+# Never rewrite real files (APK, assets, SVG)
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
+  RewriteRule \.apk$ - [L]
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
   RewriteRule ^index\.html$ - [L]
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]
 </IfModule>
 
 <IfModule mod_mime.c>
   AddType application/vnd.android.package-archive .apk
+</IfModule>
+
+# Force browser download for APK (helps Chrome / Vivo browser)
+<IfModule mod_headers.c>
+  <FilesMatch "\.apk$">
+    Header set Content-Type "application/vnd.android.package-archive"
+    Header set Content-Disposition "attachment; filename=\"DriveLink.apk\""
+    Header set Accept-Ranges bytes
+    Header unset X-Content-Type-Options
+  </FilesMatch>
+</IfModule>
+
+# PHP fallback if Apache headers module is off
+<IfModule mod_php.c>
+  # no-op
 </IfModule>
