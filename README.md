@@ -10,8 +10,8 @@ Control modes: **Joystick** and **Voice** (offline open-source **Vosk** — no G
 | Download website (React + Vite) | `website/` |
 | Firebase rules / setup notes | `FIREBASE_SETUP.txt` |
 
-**Live download site:** [http://lqit0jbd.infinityfree.com](http://lqit0jbd.infinityfree.com)  
-**APK (v1.4.1):** [GitHub Release download](https://github.com/ayenulhkhan3-droid/esp32/releases/download/v1.4.1/DriveLink.apk)  
+**Live download site:** [https://esp32.digicopy.online](https://esp32.digicopy.online)  
+**APK (v1.4.1):** [Download DriveLink.apk](https://esp32.digicopy.online/downloads/DriveLink.apk)  
 **Source:** [github.com/ayenulhkhan3-droid/esp32](https://github.com/ayenulhkhan3-droid/esp32)
 
 ```
